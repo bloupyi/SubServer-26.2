@@ -4,7 +4,7 @@
   <groupId>com.stackmc</groupId>
   <artifactId>SubServer</artifactId>
   <name>SubServer</name>
-  <version>1.4.7-SNAPSHOT</version>
+  <version>1.4.8-SNAPSHOT</version>
   <scm>
     <connection>scm:git:https://github.com/Project-Reloaded-fr/SubServer.git</connection>
     <developerConnection>scm:git:git@github.com/Project-Reloaded-fr/SubServer.git</developerConnection>
