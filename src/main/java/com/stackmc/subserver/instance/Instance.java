@@ -100,15 +100,20 @@ public class Instance {
             // pas seulement les joueurs trackés par l'instance.
             new ArrayList<>(bukkitWorld.getPlayers()).forEach(player -> player.teleport(fallback));
 
-            if (!Bukkit.unloadWorld(bukkitWorld, true)) {
-                Bukkit.getLogger().warning("Impossible de décharger le monde " + worldName
-                        + " : il reste encore chargé en mémoire (joueurs restants ou WorldUnloadEvent annulé).");
-                return;
+            // On ne sauvegarde que les mondes savable ; les temporaires (non-savable) sont
+            // chargés en read-only donc ASP ne les réécrit jamais.
+            boolean unloaded = Bukkit.unloadWorld(bukkitWorld, world.isSavable());
+            if (!unloaded) {
+                Bukkit.getLogger().warning("Déchargement du monde " + worldName
+                        + " impossible (joueurs restants, WorldUnloadEvent annulé, ou arrêt serveur).");
             }
 
             if (!world.isSavable()) {
-                // Don't let one failed deletion abort the cleanup of the remaining
-                // worlds/instances during onDisable.
+                // IMPORTANT : on supprime le fichier temporaire MÊME si unloadWorld a échoué.
+                // À l'arrêt du serveur, Bukkit refuse souvent de décharger un monde ; si on
+                // s'arrêtait là, la copie <uuid>_<world>.slime ne serait jamais supprimée et
+                // s'accumulerait à chaque redémarrage jusqu'à saturer le dossier des mondes.
+                // Le monde étant read-only, aucune réécriture ne recrée le fichier après coup.
                 try {
                     SWMUtils.deleteWorld(worldName);
                 } catch (RuntimeException e) {
