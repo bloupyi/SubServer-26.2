@@ -24,9 +24,16 @@ public final class SubServer extends JavaPlugin {
     @Getter private final InstanceFactory instanceFactory = new InstanceFactory(this);
     @Getter public static SlimeLoader loader;
 
+    /** true = les joueurs se voient d'une instance a l'autre (sinon isolation par instance). */
+    @Getter private boolean crossInstanceVisibility;
+    /** true = le chat est global entre instances (sinon chat limite a l'instance). */
+    @Getter private boolean crossInstanceChat;
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        this.crossInstanceVisibility = getConfig().getBoolean("cross-instance.visibility", false);
+        this.crossInstanceChat = getConfig().getBoolean("cross-instance.chat", false);
         loader = new FileLoader(new File(getWorldSlimeFolder()));
         this.listeners.add(new InstanceListener(this));
         this.listeners.add(new EventListener(this));

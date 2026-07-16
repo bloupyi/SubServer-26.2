@@ -32,10 +32,12 @@ public class InstanceListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        Bukkit.getOnlinePlayers().forEach(target -> {
-            event.getPlayer().hidePlayer(plugin, target);
-            target.hidePlayer(plugin, event.getPlayer());
-        });
+        if (!plugin.isCrossInstanceVisibility()) {
+            Bukkit.getOnlinePlayers().forEach(target -> {
+                event.getPlayer().hidePlayer(plugin, target);
+                target.hidePlayer(plugin, event.getPlayer());
+            });
+        }
         event.setJoinMessage(null);
 
         List<InstanceType> autospawnTypes = this.plugin.getInstanceFactory().getInstanceTypes().stream()
@@ -108,13 +110,16 @@ public class InstanceListener implements Listener {
         Instance instance = Instance.getInstance(event.getPlayer().getWorld());
 
         Set<Audience> audience = event.viewers();
-        audience.clear();
-        if (instance == null) {
-            audience.addAll(event.getPlayer().getWorld().getPlayers());
-        } else {
-            audience.addAll(instance.getPlayers());
+        // Chat global entre instances : on laisse les destinataires par defaut (tous les joueurs).
+        if (!plugin.isCrossInstanceChat()) {
+            audience.clear();
+            if (instance == null) {
+                audience.addAll(event.getPlayer().getWorld().getPlayers());
+            } else {
+                audience.addAll(instance.getPlayers());
+            }
+            audience.add(Bukkit.getConsoleSender());
         }
-        audience.add(Bukkit.getConsoleSender());
 
         InstanceChatEvent chatEvent = new InstanceChatEvent(instance, event.getPlayer(), event.message(), audience);
         Bukkit.getScheduler().runTask(plugin,() -> Bukkit.getPluginManager().callEvent(chatEvent));
@@ -124,7 +129,9 @@ public class InstanceListener implements Listener {
             return;
         }
 
-        instance.dispatchEvent(event);
+        if (instance != null) {
+            instance.dispatchEvent(event);
+        }
     }
 
     @EventHandler

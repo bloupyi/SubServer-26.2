@@ -3,3 +3,10 @@ instance-event:
   join: "§6 playerName() viens de rejoindre le serveur."
   quit: "§6 playerName() viens de quitter le serveur."
   death: "playerName() viens de mourir."
+
+# Ponts entre instances (sous-serveurs). Par defaut chaque instance est isolee.
+cross-instance:
+  # true = les joueurs d'une instance voient ceux des autres instances.
+  visibility: false
+  # true = le chat est partage entre toutes les instances (chat global).
+  chat: false

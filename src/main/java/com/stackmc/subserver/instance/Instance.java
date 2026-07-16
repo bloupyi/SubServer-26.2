@@ -187,10 +187,12 @@ public class Instance {
 
         Instance oldInstance = Instance.getInstance(player.getWorld());
         if(oldInstance != null) oldInstance.quitInstance(player);
-        getPlayers().forEach(target -> {
-            player.showPlayer(plugin, target);
-            target.showPlayer(plugin, player);
-        });
+        if (!plugin.isCrossInstanceVisibility()) {
+            getPlayers().forEach(target -> {
+                player.showPlayer(plugin, target);
+                target.showPlayer(plugin, player);
+            });
+        }
         offlinePlayers.add(player);
         player.teleport(worlds.get(0).getWorld().getSpawnLocation());
 
@@ -208,10 +210,12 @@ public class Instance {
 
         Instance oldInstance = Instance.getInstance(player.getWorld());
         if(oldInstance != null) oldInstance.quitInstance(player);
-        getPlayers().forEach(target -> {
-            player.showPlayer(plugin, target);
-            target.showPlayer(plugin, player);
-        });
+        if (!plugin.isCrossInstanceVisibility()) {
+            getPlayers().forEach(target -> {
+                player.showPlayer(plugin, target);
+                target.showPlayer(plugin, player);
+            });
+        }
         offlinePlayers.add(player);
         player.teleport(getInstanciableWorld(world.getName()).getWorld().getSpawnLocation());
     }
@@ -224,10 +228,12 @@ public class Instance {
             return;
         }
 
-        getPlayers().forEach(target -> {
-            player.hidePlayer(plugin, target);
-            target.hidePlayer(plugin, player);
-        });
+        if (!plugin.isCrossInstanceVisibility()) {
+            getPlayers().forEach(target -> {
+                player.hidePlayer(plugin, target);
+                target.hidePlayer(plugin, player);
+            });
+        }
         offlinePlayers.remove(player);
 
         //PlayerQuitEvent event = new PlayerQuitEvent(player," ");
