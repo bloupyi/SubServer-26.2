@@ -141,6 +141,48 @@ public class Instance {
         plugin.getInstanceFactory().removeInstance(this);
     }
 
+    /**
+     * Decharge un seul monde de l'instance, qui reste ouverte.
+     *
+     * <p>Ce qu'il faut pour une instance qui garde plusieurs mondes charges autour du joueur
+     * et se debarrasse de ceux qui se sont eloignes : sans cela, decharger un monde imposait
+     * de fermer toute l'instance.</p>
+     *
+     * <p>Un monde ou se trouve encore quelqu'un n'est jamais decharge : c'est a l'appelant de
+     * deplacer les joueurs d'abord.</p>
+     *
+     * @return {@code true} si le monde a bien ete decharge
+     */
+    public boolean unloadWorld(String worldName) {
+        InstanciableWorld target = getInstanciableWorld(worldName);
+        if (target == null) {
+            return false;
+        }
+
+        World bukkitWorld = target.getWorld();
+        if (!bukkitWorld.getPlayers().isEmpty()) {
+            return false;
+        }
+
+        boolean unloaded = Bukkit.unloadWorld(bukkitWorld, target.isSavable());
+        if (!unloaded) {
+            Bukkit.getLogger().warning("Déchargement du monde " + worldName + " impossible.");
+            return false;
+        }
+
+        worlds.remove(target);
+
+        if (!target.isSavable()) {
+            try {
+                SWMUtils.deleteWorld(worldName);
+            } catch (RuntimeException e) {
+                Bukkit.getLogger().warning("Impossible de supprimer le monde temporaire "
+                        + worldName + " : " + e.getMessage());
+            }
+        }
+        return true;
+    }
+
     public void loadWorld(String worldName, boolean isSavable, @Nullable Consumer<String> callback) {
         loadWorld(worldName, isSavable, callback, null);
     }
