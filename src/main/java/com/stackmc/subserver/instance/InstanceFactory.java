@@ -33,6 +33,9 @@ public class InstanceFactory {
         Set<Instance> typeInstances = instances.get(instance.getType());
         if (typeInstances != null) {
             typeInstances.remove(instance);
+            if (typeInstances.isEmpty()) {
+                instances.remove(instance.getType());
+            }
         }
 
         if (autoJoinInstance == instance) {
