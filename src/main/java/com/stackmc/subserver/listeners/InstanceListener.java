@@ -25,7 +25,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class InstanceListener implements Listener {
-
     private final SubServer plugin;
 
     public InstanceListener(SubServer plugin) {
@@ -57,8 +56,10 @@ public class InstanceListener implements Listener {
         }
 
         InstanceType type = autospawnTypes.get(0);
+
         Instance instance = this.plugin.getInstanceFactory().getInstances(type).stream()
-                .filter(inst -> inst.getPlayers().size() < type.getMaxPlayers())
+                .filter(inst -> !inst.isClosed() && !inst.getWorlds().isEmpty())
+                .filter(inst -> type.hasRoomFor(inst.getPlayers().size()))
                 .findAny()
                 .orElse(null);
 
@@ -87,7 +88,6 @@ public class InstanceListener implements Listener {
 
     @EventHandler
     public void onDeath(PlayerDeathEvent event) {
-
         Player player = event.getEntity().getPlayer();
         if (player == null) return;
         Instance instance = Instance.getInstance(player.getWorld());
@@ -112,7 +112,7 @@ public class InstanceListener implements Listener {
         Instance instance = Instance.getInstance(event.getPlayer().getWorld());
 
         Set<Audience> audience = event.viewers();
-        // Chat global entre instances : on laisse les destinataires par defaut (tous les joueurs).
+
         if (!plugin.isCrossInstanceChat()) {
             audience.clear();
             if (instance == null) {

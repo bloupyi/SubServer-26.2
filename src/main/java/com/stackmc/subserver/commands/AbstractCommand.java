@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public abstract class AbstractCommand implements TabExecutor {
-
     private final Map<String, TabExecutor> subCommands = new HashMap<>();
     protected final SubServer plugin;
 

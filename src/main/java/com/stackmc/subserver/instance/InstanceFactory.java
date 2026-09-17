@@ -6,18 +6,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 @RequiredArgsConstructor
 public class InstanceFactory {
-
     private final SubServer plugin;
 
     @Getter private final Set<InstanceType> instanceTypes = new HashSet<>();
     private final Map<InstanceType, Set<Instance>> instances = new HashMap<>();
     @Getter @Setter public Instance autoJoinInstance = null;
+
+    private final AtomicInteger nameCounter = new AtomicInteger();
 
     private BukkitTask task;
 
@@ -49,7 +53,10 @@ public class InstanceFactory {
             return;
         }
 
-        task = Bukkit.getScheduler().runTaskTimer(plugin, this::generateInstances, 20, 20);
+        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            generateInstances();
+            closeEmptyInstances();
+        }, 20, 20);
     }
 
     public void stopLoop() {
@@ -63,30 +70,106 @@ public class InstanceFactory {
 
     public void generateInstances() {
         for (InstanceType type : instanceTypes) {
-            Set<Instance> instances = this.instances.getOrDefault(type, new HashSet<>());
-            for (int i = 0; i < type.getMaxInstancesCount() - instances.size(); i++) {
-                Instance instance = new Instance(type.getName() + "_" + (i * new Random().nextInt(10000) * 5), plugin, type);
-                generateWorlds(type, instance);
-                instance.register();
-                instances.add(instance);
+            if (!type.isPreGenerated()) {
+                continue;
+            }
+
+            Set<Instance> typeInstances = this.instances.computeIfAbsent(type, key -> new HashSet<>());
+            int missing = type.getMaxInstancesCount() - typeInstances.size();
+            for (int i = 0; i < missing; i++) {
+                Instance instance = open(type, null);
                 if (type.isAutoJoin()) autoJoinInstance = instance;
             }
-            this.instances.put(type, instances);
         }
     }
 
-    private void generateWorlds(InstanceType type, Instance instance) {
-        AtomicInteger i = new AtomicInteger();
+    @Nullable
+    public Instance createInstance(InstanceType type, @Nullable Consumer<Instance> onReady) {
+        Set<Instance> typeInstances = this.instances.computeIfAbsent(type, key -> new HashSet<>());
+        if (typeInstances.size() >= InstanceType.MAX_INSTANCES_LIMIT) {
+            return null;
+        }
+        return open(type, onReady);
+    }
+
+    /** Nombre d'instances ouvertes de ce type. */
+    public int countInstances(InstanceType type) {
+        return getInstances(type).size();
+    }
+
+    private Instance open(InstanceType type, @Nullable Consumer<Instance> onReady) {
+        Instance instance = new Instance(type.getName() + "_" + nameCounter.incrementAndGet(), plugin, type);
+        this.instances.computeIfAbsent(type, key -> new HashSet<>()).add(instance);
+        instance.register();
+        generateWorlds(type, instance, onReady);
+        return instance;
+    }
+
+    public void closeEmptyInstances() {
+        long now = System.currentTimeMillis();
+
+        for (Instance instance : new ArrayList<>(Instance.getInstances())) {
+            InstanceType type = instance.getType();
+            if (type == null || !type.isCloseWhenEmpty() || instance.isClosed()) {
+                continue;
+            }
+
+            if (instance.getState() == InstanceState.INIT) {
+                continue;
+            }
+
+            if (!instance.isEmpty()) {
+                instance.setEmptySince(0);
+                continue;
+            }
+
+            if (instance.getEmptySince() == 0) {
+                instance.setEmptySince(now);
+                continue;
+            }
+
+            if (now - instance.getEmptySince() >= type.getEmptyGraceSeconds() * 1000L) {
+                instance.close();
+            }
+        }
+    }
+
+    private void generateWorlds(InstanceType type, Instance instance, @Nullable Consumer<Instance> onReady) {
         int max = type.getWorlds().size();
+        if (max == 0) {
+            instance.setState(InstanceState.CLOSED);
+            type.getPostInitRunnable().accept(instance);
+            if (onReady != null) {
+                onReady.accept(instance);
+            }
+            return;
+        }
+
+        AtomicInteger loaded = new AtomicInteger();
+
+        AtomicBoolean aborted = new AtomicBoolean();
+
         for (InstanceType.InstanciableWorld world : type.getWorlds()) {
-            instance.loadWorld(world.getWorldName(), world.isSavable(), (str) -> {
-                i.getAndIncrement();
-                if (i.get() == max) {
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        instance.setState(InstanceState.CLOSED);
-                        type.getPostInitRunnable().accept(instance);
-                    });
+            instance.loadWorld(world.getWorldName(), world.isSavable(), str -> {
+                if (loaded.incrementAndGet() != max) {
+                    return;
                 }
+
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (aborted.get() || instance.isClosed()) {
+                        return;
+                    }
+                    instance.setState(InstanceState.CLOSED);
+                    type.getPostInitRunnable().accept(instance);
+                    if (onReady != null) {
+                        onReady.accept(instance);
+                    }
+                });
+            }, () -> {
+                aborted.set(true);
+                Bukkit.getLogger().warning("Instance " + instance.getName()
+                        + " : monde " + world.getWorldName() + " non charge, l'instance est abandonnee.");
+                instance.close();
             });
         }
     }

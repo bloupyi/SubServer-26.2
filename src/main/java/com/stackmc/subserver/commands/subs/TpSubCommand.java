@@ -25,11 +25,21 @@ public class TpSubCommand implements TabExecutor {
             return false;
         }
         World world = Bukkit.getWorld(args[0]);
-        if(world == null) sender.sendMessage("§cCe monde n'existe pas.");
+        if (world == null) {
+            sender.sendMessage("§cCe monde n'existe pas.");
+            return false;
+        }
 
-        Player player = (Player) sender;
-        Instance instance = Instance.getInstance(Bukkit.getWorld(args[0]));
-        instance.joinInstance(player);
+        Instance instance = Instance.getInstance(world);
+        if (instance == null) {
+            sender.sendMessage("§cCe monde n'appartient à aucune instance.");
+            return false;
+        }
+
+        if (!instance.joinInstance((Player) sender, world)) {
+            sender.sendMessage("§cImpossible de rejoindre cette instance (fermée ou pleine).");
+            return false;
+        }
         return true;
     }
 

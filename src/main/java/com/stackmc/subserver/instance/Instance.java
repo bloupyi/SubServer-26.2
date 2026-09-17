@@ -3,7 +3,7 @@ package com.stackmc.subserver.instance;
 import com.infernalsuite.asp.api.exceptions.CorruptedWorldException;
 import com.infernalsuite.asp.api.exceptions.NewerFormatException;
 import com.infernalsuite.asp.api.exceptions.UnknownWorldException;
-import com.infernalsuite.asp.api.exceptions.WorldLoadedException;
+import com.infernalsuite.asp.api.world.SlimeWorld;
 import com.stackmc.subserver.SubServer;
 import com.stackmc.subserver.events.InstanceChatEvent;
 import com.stackmc.subserver.events.InstanceJoinEvent;
@@ -32,7 +32,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Getter
 public class Instance {
-
     @Getter private static final Set<Instance> instances = new HashSet<>();
 
     public static Instance getInstance(World world) {
@@ -45,7 +44,20 @@ public class Instance {
     }
 
     public static Instance getInstance(String name) {
-        return instances.stream().filter(instance -> instance.getName().contains(name)).findAny().orElse(null);
+        return instances.stream().filter(instance -> instance.getName().equals(name)).findAny().orElse(null);
+    }
+
+    public static Instance findInstance(String name) {
+        Instance exact = getInstance(name);
+        if (exact != null) {
+            return exact;
+        }
+
+        List<Instance> matches = instances.stream()
+                .filter(instance -> instance.getName().startsWith(name))
+                .limit(2)
+                .collect(Collectors.toList());
+        return matches.size() == 1 ? matches.get(0) : null;
     }
 
     private final String name;
@@ -55,6 +67,11 @@ public class Instance {
     private final Set<OfflinePlayer> offlinePlayers = new HashSet<>();
     private final UUID uniqueId = UUID.randomUUID();
     @Setter private InstanceState state = InstanceState.INIT;
+
+    @Setter private long emptySince;
+
+    /** Empeche une double fermeture : {@code close()} est appelable depuis plusieurs endroits. */
+    private boolean closed;
 
     @Getter
     @RequiredArgsConstructor
@@ -89,19 +106,20 @@ public class Instance {
     }
 
     public void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        state = InstanceState.FINISHED;
+
         Location fallback = Bukkit.getWorlds().get(0).getSpawnLocation();
 
         worlds.forEach(world -> {
             World bukkitWorld = world.getWorld();
             String worldName = bukkitWorld.getName();
 
-            // unloadWorld renvoie false (et laisse le monde en mémoire) tant qu'il
-            // reste des joueurs dedans : on évacue tout le monde réellement présent,
-            // pas seulement les joueurs trackés par l'instance.
             new ArrayList<>(bukkitWorld.getPlayers()).forEach(player -> player.teleport(fallback));
 
-            // On ne sauvegarde que les mondes savable ; les temporaires (non-savable) sont
-            // chargés en read-only donc ASP ne les réécrit jamais.
             boolean unloaded = Bukkit.unloadWorld(bukkitWorld, world.isSavable());
             if (!unloaded) {
                 Bukkit.getLogger().warning("Déchargement du monde " + worldName
@@ -109,11 +127,6 @@ public class Instance {
             }
 
             if (!world.isSavable()) {
-                // IMPORTANT : on supprime le fichier temporaire MÊME si unloadWorld a échoué.
-                // À l'arrêt du serveur, Bukkit refuse souvent de décharger un monde ; si on
-                // s'arrêtait là, la copie <uuid>_<world>.slime ne serait jamais supprimée et
-                // s'accumulerait à chaque redémarrage jusqu'à saturer le dossier des mondes.
-                // Le monde étant read-only, aucune réécriture ne recrée le fichier après coup.
                 try {
                     SWMUtils.deleteWorld(worldName);
                 } catch (RuntimeException e) {
@@ -129,95 +142,127 @@ public class Instance {
     }
 
     public void loadWorld(String worldName, boolean isSavable, @Nullable Consumer<String> callback) {
-        final Consumer<String> finalCallback = (callback == null ? (s -> {}) : callback);
+        loadWorld(worldName, isSavable, callback, null);
+    }
 
-        String destWorldName;
-        if (isSavable) {
-            destWorldName = worldName;
-        } else {
-            destWorldName = getUniqueId().toString() + "_" + worldName;
-        }
+    public void loadWorld(String worldName, boolean isSavable, @Nullable Consumer<String> callback,
+                          @Nullable Runnable onFailure) {
+        final Consumer<String> finalCallback = (callback == null ? (s -> {}) : callback);
+        final Runnable finalFailure = (onFailure == null ? () -> {} : onFailure);
+
+        String destWorldName = isSavable ? worldName : getUniqueId() + "_" + worldName;
 
         File src = new File(SWMUtils.getWorldSlimeFolder() + File.separator + worldName + ".slime");
-        File dest = new File( SWMUtils.getWorldSlimeFolder() + File.separator + destWorldName + ".slime");
+        File dest = new File(SWMUtils.getWorldSlimeFolder() + File.separator + destWorldName + ".slime");
 
         long startTime = System.currentTimeMillis();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            SlimeWorld read;
             try {
                 if (!isSavable) {
                     Files.copy(src.toPath(), dest.toPath());
                 }
-            } catch (IOException e) {
-                finalCallback.accept("§cLe monde spécifié (" + worldName + ") n'existe pas.");
+                read = SWMUtils.read(destWorldName, !isSavable);
+            } catch (IOException | UnknownWorldException | CorruptedWorldException | NewerFormatException e) {
+                fail(finalCallback, finalFailure,
+                        "§cLecture du monde " + worldName + " impossible : " + e.getMessage(), isSavable, destWorldName);
                 return;
             }
 
             Bukkit.getScheduler().runTask(plugin, () -> {
+                World world;
                 try {
-                    SWMUtils.loadWorld(destWorldName, !isSavable);
-                } catch (UnknownWorldException | IOException | CorruptedWorldException | NewerFormatException |
-                         WorldLoadedException e) {
-                    finalCallback.accept("§cUne erreur est survenue lors du chargement du monde.");
+                    SWMUtils.attach(read);
+                    world = Bukkit.getWorld(destWorldName);
+                } catch (IllegalArgumentException e) {
+                    world = null;
                 }
+
+                if (world == null) {
+                    fail(finalCallback, finalFailure,
+                            "§cChargement du monde " + destWorldName + " impossible.", isSavable, destWorldName);
+                    return;
+                }
+
+                addWorld(world, isSavable);
+                long totalTime = System.currentTimeMillis() - startTime;
+                finalCallback.accept("Monde " + destWorldName + " chargé en " + totalTime + "ms ou "
+                        + ((float) totalTime / 50f) + " ticks .");
             });
-
-            World world;
-            do {
-                world = Bukkit.getWorld(destWorldName);
-            } while (world == null); // I can do this because i'm in an async thread
-
-            this.addWorld(world, isSavable);
-
-            long totalTime = System.currentTimeMillis() - startTime;
-            finalCallback.accept("Monde " + destWorldName +  " chargé en " + totalTime + "ms ou " + ((float) totalTime / 50f) + " ticks .");
         });
+    }
+
+    /** Signale l'echec et efface la copie temporaire, qui ne sera jamais rattachee. */
+    private void fail(Consumer<String> callback, Runnable onFailure, String message,
+                      boolean isSavable, String destWorldName) {
+        if (!isSavable) {
+            try {
+                SWMUtils.deleteWorld(destWorldName);
+            } catch (RuntimeException ignored) {
+            }
+        }
+
+        Runnable report = () -> {
+            callback.accept(message);
+            onFailure.run();
+        };
+        if (Bukkit.isPrimaryThread()) {
+            report.run();
+        } else {
+            Bukkit.getScheduler().runTask(plugin, report);
+        }
     }
 
     public void addWorld(World world, boolean isSavable) {
         worlds.add(new InstanciableWorld(world,isSavable));
     }
 
-    public void joinInstance(Player player) {
-        InstanceJoinEvent event = new InstanceJoinEvent(this, player);
-        Bukkit.getPluginManager().callEvent(event);
-
-        if (event.isCancelled()) {
-            return;
-        }
-
-        Instance oldInstance = Instance.getInstance(player.getWorld());
-        if(oldInstance != null) oldInstance.quitInstance(player);
-        if (!plugin.isCrossInstanceVisibility()) {
-            getPlayers().forEach(target -> {
-                player.showPlayer(plugin, target);
-                target.showPlayer(plugin, player);
-            });
-        }
-        offlinePlayers.add(player);
-        player.teleport(worlds.get(0).getWorld().getSpawnLocation());
-
-        //PlayerJoinEvent event = new PlayerJoinEvent(player," ");
-        //this.dispatchEvent(event);
+    public boolean joinInstance(Player player) {
+        return joinInstance(player, worlds.isEmpty() ? null : worlds.get(0).getWorld());
     }
 
-    public void joinInstance(Player player, World world) {
+    public boolean joinInstance(Player player, World world) {
+        if (closed || worlds.isEmpty()) {
+            return false;
+        }
+
+        InstanciableWorld target = world == null ? worlds.get(0) : getInstanciableWorld(world.getName());
+        if (target == null) {
+            return false;
+        }
+
+        if (type != null && !offlinePlayers.contains(player) && !type.hasRoomFor(getPlayers().size())) {
+            return false;
+        }
+
         InstanceJoinEvent event = new InstanceJoinEvent(this, player);
         Bukkit.getPluginManager().callEvent(event);
 
         if (event.isCancelled()) {
-            return;
+            return false;
         }
 
         Instance oldInstance = Instance.getInstance(player.getWorld());
-        if(oldInstance != null) oldInstance.quitInstance(player);
+        if (oldInstance != null && oldInstance != this) oldInstance.quitInstance(player);
         if (!plugin.isCrossInstanceVisibility()) {
-            getPlayers().forEach(target -> {
-                player.showPlayer(plugin, target);
-                target.showPlayer(plugin, player);
+            getPlayers().forEach(target2 -> {
+                player.showPlayer(plugin, target2);
+                target2.showPlayer(plugin, player);
             });
         }
         offlinePlayers.add(player);
-        player.teleport(getInstanciableWorld(world.getName()).getWorld().getSpawnLocation());
+        emptySince = 0;
+        player.teleport(target.getWorld().getSpawnLocation());
+        return true;
+    }
+
+    /** {@code true} si plus aucun joueur connecte n'est dans cette instance. */
+    public boolean isEmpty() {
+        return getPlayers().isEmpty();
+    }
+
+    public boolean isClosed() {
+        return closed;
     }
 
     public void quitInstance(Player player) {
@@ -235,9 +280,6 @@ public class Instance {
             });
         }
         offlinePlayers.remove(player);
-
-        //PlayerQuitEvent event = new PlayerQuitEvent(player," ");
-        //this.dispatchEvent(event);
     }
 
     public void sendMessage(String message) {

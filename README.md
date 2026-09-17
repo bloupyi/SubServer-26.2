@@ -35,6 +35,26 @@ That is your entrypoint to control the behavior of instances.
 
 Another important point is that for each instance, if you need to register an event listener, you must do it using the `Instance#registerListener` method. It will allow you to only catch the events of your own instance, you won't have to filter yourself which event is yours.
 
+### Pre-generated vs on-demand instances
+
+`InstanceType#maxInstancesCount` is capped at `InstanceType.MAX_INSTANCES_LIMIT` (10). Above
+zero, the factory loop keeps that many instances open. At zero the type is **on demand**:
+nothing is pre-generated and each instance comes from `InstanceFactory#createInstance`.
+
+```java
+InstanceType game = new InstanceType("my_game", false, 8);
+game.setMaxInstancesCount(0);          // on demand
+game.setCloseWhenEmpty(true);          // closed once everyone leaves
+game.setEmptyGraceSeconds(15);
+game.addWorld("my_map", false);        // copied to <uuid>_my_map.slime, deleted on close
+
+factory.registerType(game);
+factory.createInstance(game, instance -> instance.joinInstance(player));
+```
+
+`Instance#loadWorld` takes an optional failure callback; on failure the temporary copy is
+deleted and the instance is abandoned instead of being reported as ready.
+
 ## Contributors
 - [LoanSpac](https://github.com/LoanSpac)
 - [Clooooud](https://github.com/Clooooud)
