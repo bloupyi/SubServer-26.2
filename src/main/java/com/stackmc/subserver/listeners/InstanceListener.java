@@ -9,6 +9,8 @@ import com.stackmc.subserver.instance.Instance;
 import com.stackmc.subserver.instance.InstanceType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -38,7 +40,7 @@ public class InstanceListener implements Listener {
                 target.hidePlayer(plugin, event.getPlayer());
             });
         }
-        event.setJoinMessage(null);
+        event.joinMessage(null);
 
         List<InstanceType> autospawnTypes = this.plugin.getInstanceFactory().getInstanceTypes().stream()
                 .filter(InstanceType::isAutoJoin)
@@ -62,7 +64,7 @@ public class InstanceListener implements Listener {
 
         if (instance == null) {
             Bukkit.getLogger().severe("No instance are open for auto-join.");
-            event.getPlayer().kickPlayer("Server is full, sorry.");
+            event.getPlayer().kick(Component.text("Serveur plein, reessaie plus tard.", NamedTextColor.RED));
             return;
         }
 
