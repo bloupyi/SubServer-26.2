@@ -80,7 +80,7 @@ public class InstanceFactory {
             Set<Instance> typeInstances = this.instances.computeIfAbsent(type, key -> new HashSet<>());
             int missing = type.getMaxInstancesCount() - typeInstances.size();
             for (int i = 0; i < missing; i++) {
-                Instance instance = open(type, null);
+                Instance instance = open(type, null, null);
                 if (type.isAutoJoin()) autoJoinInstance = instance;
             }
         }
@@ -88,11 +88,25 @@ public class InstanceFactory {
 
     @Nullable
     public Instance createInstance(InstanceType type, @Nullable Consumer<Instance> onReady) {
+        return createInstance(type, null, onReady);
+    }
+
+    /**
+     * Cree une instance en remplacant les mondes du type par ceux passes en argument.
+     *
+     * <p>Un type decrit des mondes fixes, ce qui suffit a un lobby mais pas a un editeur ou a
+     * une partie, dont le monde change a chaque fois. Plutot que d'enregistrer un type par
+     * monde — ils sont globaux et plafonnes — le type sert de gabarit (capacite, fermeture
+     * automatique) et les mondes sont donnes ici.</p>
+     */
+    @Nullable
+    public Instance createInstance(InstanceType type, @Nullable List<InstanceType.InstanciableWorld> worlds,
+                                   @Nullable Consumer<Instance> onReady) {
         Set<Instance> typeInstances = this.instances.computeIfAbsent(type, key -> new HashSet<>());
         if (typeInstances.size() >= InstanceType.MAX_INSTANCES_LIMIT) {
             return null;
         }
-        return open(type, onReady);
+        return open(type, worlds, onReady);
     }
 
     /** Nombre d'instances ouvertes de ce type. */
@@ -100,11 +114,12 @@ public class InstanceFactory {
         return getInstances(type).size();
     }
 
-    private Instance open(InstanceType type, @Nullable Consumer<Instance> onReady) {
+    private Instance open(InstanceType type, @Nullable List<InstanceType.InstanciableWorld> worlds,
+                          @Nullable Consumer<Instance> onReady) {
         Instance instance = new Instance(type.getName() + "_" + nameCounter.incrementAndGet(), plugin, type);
         this.instances.computeIfAbsent(type, key -> new HashSet<>()).add(instance);
         instance.register();
-        generateWorlds(type, instance, onReady);
+        generateWorlds(type, instance, worlds == null ? type.getWorlds() : worlds, onReady);
         return instance;
     }
 
@@ -137,8 +152,10 @@ public class InstanceFactory {
         }
     }
 
-    private void generateWorlds(InstanceType type, Instance instance, @Nullable Consumer<Instance> onReady) {
-        int max = type.getWorlds().size();
+    private void generateWorlds(InstanceType type, Instance instance,
+                                List<InstanceType.InstanciableWorld> worlds,
+                                @Nullable Consumer<Instance> onReady) {
+        int max = worlds.size();
         if (max == 0) {
             instance.setState(InstanceState.CLOSED);
             type.getPostInitRunnable().accept(instance);
@@ -152,7 +169,7 @@ public class InstanceFactory {
 
         AtomicBoolean aborted = new AtomicBoolean();
 
-        for (InstanceType.InstanciableWorld world : type.getWorlds()) {
+        for (InstanceType.InstanciableWorld world : worlds) {
             instance.loadWorld(world.getWorldName(), world.isSavable(), str -> {
                 if (loaded.incrementAndGet() != max) {
                     return;

@@ -152,15 +152,12 @@ public class Instance {
 
         String destWorldName = isSavable ? worldName : getUniqueId() + "_" + worldName;
 
-        File src = new File(SWMUtils.getWorldSlimeFolder() + File.separator + worldName + ".slime");
-        File dest = new File(SWMUtils.getWorldSlimeFolder() + File.separator + destWorldName + ".slime");
-
         long startTime = System.currentTimeMillis();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             SlimeWorld read;
             try {
                 if (!isSavable) {
-                    Files.copy(src.toPath(), dest.toPath());
+                    SWMUtils.copy(worldName, destWorldName);
                 }
                 read = SWMUtils.read(destWorldName, !isSavable);
             } catch (IOException | UnknownWorldException | CorruptedWorldException | NewerFormatException e) {

@@ -61,6 +61,29 @@ public class SWMUtils {
         }
     }
 
+    /**
+     * Duplique un monde au travers du loader.
+     *
+     * <p>Et non par une copie de fichier : le loader range les mondes par proprietaire, le
+     * chemin d'un nom de monde n'est plus devinable depuis la racine.</p>
+     */
+    /**
+     * Cree un monde vide et l'ecrit sur le disque, sans le charger.
+     *
+     * <p>C'est ce qui permet a un plugin de fabriquer un monde a la demande — une map de
+     * joueur, par exemple — au lieu d'exiger qu'un {@code .slime} existe deja.
+     * <b>A appeler de maniere asynchrone.</b></p>
+     */
+    public static void createEmpty(String worldName) throws IOException {
+        getSlimePlugin().saveWorld(
+                getSlimePlugin().createEmptyWorld(worldName, false, getDefaultProperties(), SubServer.loader));
+    }
+
+    public static void copy(String sourceName, String destinationName) throws IOException, UnknownWorldException {
+        SlimeLoader loader = SubServer.loader;
+        loader.saveWorld(destinationName, loader.readWorld(sourceName));
+    }
+
     public static void deleteWorld(String worldName) {
         SlimeLoader loader = SubServer.loader;
         try {
