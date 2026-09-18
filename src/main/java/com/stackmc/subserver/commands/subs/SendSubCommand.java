@@ -30,13 +30,16 @@ public class SendSubCommand implements TabExecutor {
             return false;
         }
 
-        Instance instance = Instance.getInstance(args[1]);
+        Instance instance = Instance.findInstance(args[1]);
         if(instance == null) {
-            sender.sendMessage("§cCette instance n'existe pas.");
+            sender.sendMessage("§cCette instance n'existe pas (ou plusieurs portent ce nom).");
             return false;
         }
 
-        instance.joinInstance(target);
+        if (!instance.joinInstance(target)) {
+            sender.sendMessage("§cL'instance " + instance.getName() + " est fermée ou pleine.");
+            return false;
+        }
         sender.sendMessage("§a" + target.getName() + " a été envoyé sur l'instance " + instance.getName() + ".");
         return true;
     }

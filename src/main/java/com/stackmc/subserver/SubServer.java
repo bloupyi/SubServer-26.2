@@ -1,8 +1,8 @@
 package com.stackmc.subserver;
 
 import com.infernalsuite.asp.api.loaders.SlimeLoader;
-import com.infernalsuite.asp.loaders.file.FileLoader;
 import com.stackmc.subserver.commands.SubServerCommand;
+import com.stackmc.subserver.worldgen.TreeSlimeLoader;
 import com.stackmc.subserver.instance.Instance;
 import com.stackmc.subserver.instance.InstanceFactory;
 import com.stackmc.subserver.listeners.EventListener;
@@ -34,7 +34,7 @@ public final class SubServer extends JavaPlugin {
         saveDefaultConfig();
         this.crossInstanceVisibility = getConfig().getBoolean("cross-instance.visibility", false);
         this.crossInstanceChat = getConfig().getBoolean("cross-instance.chat", false);
-        loader = new FileLoader(new File(getWorldSlimeFolder()));
+        loader = new TreeSlimeLoader(new File(getWorldSlimeFolder()));
         this.listeners.add(new InstanceListener(this));
         this.listeners.add(new EventListener(this));
         registerListeners();

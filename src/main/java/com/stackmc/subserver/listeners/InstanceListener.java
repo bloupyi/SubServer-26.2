@@ -9,6 +9,8 @@ import com.stackmc.subserver.instance.Instance;
 import com.stackmc.subserver.instance.InstanceType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -23,7 +25,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class InstanceListener implements Listener {
-
     private final SubServer plugin;
 
     public InstanceListener(SubServer plugin) {
@@ -38,7 +39,7 @@ public class InstanceListener implements Listener {
                 target.hidePlayer(plugin, event.getPlayer());
             });
         }
-        event.setJoinMessage(null);
+        event.joinMessage(null);
 
         List<InstanceType> autospawnTypes = this.plugin.getInstanceFactory().getInstanceTypes().stream()
                 .filter(InstanceType::isAutoJoin)
@@ -55,14 +56,16 @@ public class InstanceListener implements Listener {
         }
 
         InstanceType type = autospawnTypes.get(0);
+
         Instance instance = this.plugin.getInstanceFactory().getInstances(type).stream()
-                .filter(inst -> inst.getPlayers().size() < type.getMaxPlayers())
+                .filter(inst -> !inst.isClosed() && !inst.getWorlds().isEmpty())
+                .filter(inst -> type.hasRoomFor(inst.getPlayers().size()))
                 .findAny()
                 .orElse(null);
 
         if (instance == null) {
             Bukkit.getLogger().severe("No instance are open for auto-join.");
-            event.getPlayer().kickPlayer("Server is full, sorry.");
+            event.getPlayer().kick(Component.text("Serveur plein, reessaie plus tard.", NamedTextColor.RED));
             return;
         }
 
@@ -85,7 +88,6 @@ public class InstanceListener implements Listener {
 
     @EventHandler
     public void onDeath(PlayerDeathEvent event) {
-
         Player player = event.getEntity().getPlayer();
         if (player == null) return;
         Instance instance = Instance.getInstance(player.getWorld());
@@ -110,7 +112,7 @@ public class InstanceListener implements Listener {
         Instance instance = Instance.getInstance(event.getPlayer().getWorld());
 
         Set<Audience> audience = event.viewers();
-        // Chat global entre instances : on laisse les destinataires par defaut (tous les joueurs).
+
         if (!plugin.isCrossInstanceChat()) {
             audience.clear();
             if (instance == null) {

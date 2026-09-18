@@ -12,7 +12,6 @@ import java.util.List;
 
 @RequiredArgsConstructor
 public class CloseSubCommand implements TabExecutor {
-
     private final SubServer plugin;
 
     @Override
@@ -21,10 +20,15 @@ public class CloseSubCommand implements TabExecutor {
             sender.sendMessage("§cVous devez préciser un nom d'instance.");
             return false;
         }
-        Instance instance = Instance.getInstance(args[0]);
+        Instance instance = Instance.findInstance(args[0]);
+        if (instance == null) {
+            sender.sendMessage("§cAucune instance ne porte ce nom (ou plusieurs correspondent).");
+            return false;
+        }
+        String name = instance.getName();
+
         instance.close();
-        Instance.getInstances().remove(instance);
-        sender.sendMessage(String.format("L'instance %s est maintenant fermée.", instance.getName()));
+        sender.sendMessage(String.format("L'instance %s est maintenant fermée.", name));
         return true;
     }
 

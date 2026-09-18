@@ -2,7 +2,8 @@ package com.stackmc.subserver.commands;
 
 import com.stackmc.subserver.SubServer;
 import lombok.RequiredArgsConstructor;
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -15,7 +16,6 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public abstract class AbstractCommand implements TabExecutor {
-
     private final Map<String, TabExecutor> subCommands = new HashMap<>();
     protected final SubServer plugin;
 
@@ -27,14 +27,14 @@ public abstract class AbstractCommand implements TabExecutor {
         subCommands.put(label.toLowerCase(), subCommand);
     }
 
-    protected String getUsage() {
-        return ChatColor.RED + "Usage: /subserver <" + String.join("|", this.subCommands.keySet()) + ">";
+    protected Component getUsage() {
+        return Component.text("Usage: /subserver <" + String.join("|", this.subCommands.keySet()) + ">", NamedTextColor.RED);
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if(!sender.hasPermission(this.getPermission()) && !sender.isOp()) {
-            sender.sendMessage("Pas les perms");
+            sender.sendMessage(Component.text("Tu n'as pas la permission d'utiliser cette commande.", NamedTextColor.RED));
             return true;
         }
 

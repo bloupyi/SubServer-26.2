@@ -61,6 +61,29 @@ public class SWMUtils {
         }
     }
 
+    /**
+     * Duplique un monde au travers du loader.
+     *
+     * <p>Et non par une copie de fichier : le loader range les mondes par proprietaire, le
+     * chemin d'un nom de monde n'est plus devinable depuis la racine.</p>
+     */
+    /**
+     * Cree un monde vide et l'ecrit sur le disque, sans le charger.
+     *
+     * <p>C'est ce qui permet a un plugin de fabriquer un monde a la demande — une map de
+     * joueur, par exemple — au lieu d'exiger qu'un {@code .slime} existe deja.
+     * <b>A appeler de maniere asynchrone.</b></p>
+     */
+    public static void createEmpty(String worldName) throws IOException {
+        getSlimePlugin().saveWorld(
+                getSlimePlugin().createEmptyWorld(worldName, false, getDefaultProperties(), SubServer.loader));
+    }
+
+    public static void copy(String sourceName, String destinationName) throws IOException, UnknownWorldException {
+        SlimeLoader loader = SubServer.loader;
+        loader.saveWorld(destinationName, loader.readWorld(sourceName));
+    }
+
     public static void deleteWorld(String worldName) {
         SlimeLoader loader = SubServer.loader;
         try {
@@ -71,16 +94,15 @@ public class SWMUtils {
     }
 
     public static void loadWorld(String worldName, boolean readOnly) throws UnknownWorldException, IOException, CorruptedWorldException, NewerFormatException, WorldLoadedException {
-        SlimeLoader loader = SubServer.loader;
+        attach(read(worldName, readOnly));
+    }
 
-        // Temporary (non-savable) worlds must be loaded read-only: ASP only persists
-        // non-read-only worlds (see isReadOnly() guards in SlimeLevelInstance#save and
-        // SWPlugin#onDisable). Otherwise the server saves them back to disk on shutdown,
-        // re-creating the .slime file right after Instance#close deletes it.
-        // note that this method should be called asynchronously
-        SlimeWorld world = getSlimePlugin().readWorld(loader, worldName, readOnly, getDefaultProperties());
+    public static SlimeWorld read(String worldName, boolean readOnly)
+            throws UnknownWorldException, IOException, CorruptedWorldException, NewerFormatException {
+        return getSlimePlugin().readWorld(SubServer.loader, worldName, readOnly, getDefaultProperties());
+    }
 
-        // note that this method must be called synchronously
+    public static void attach(SlimeWorld world) throws IllegalArgumentException {
         getSlimePlugin().loadWorld(world, true);
     }
 }
